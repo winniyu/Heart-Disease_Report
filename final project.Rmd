@@ -1,0 +1,166 @@
+---
+title: "final project"
+output: html_document
+date: "2023-03-21"
+---
+
+```{r setup, include=T}
+options(scipen=999)
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(caret)
+```
+
+
+
+```{r}
+Heart_sample=as.tibble(read.csv("heart.csv"))
+head(Heart_sample)  
+```
+Q10
+```{r}
+Heart_sample1 = Heart_sample[c(12,1,4,5,6,8,10)]
+head(Heart_sample1)
+library(corrplot)
+corrplot(cor(Heart_sample1), type = "upper")
+```
+While some predictors are boolean or categorical, I created a new dataset that only include the numeric predictors, including age, cholesterol, fastingbs, maxhr, and old peak. Based on the ouput, MaxHr tends to have the strongest negative correlation with heart disease. Meanwhile, oldpeak seems to have a strongest positive correlation with heart disease. Comparatively, the predictors, age, cholesterol, and fasting bs also demonstrate a moderate correlation with heart disease.
+
+To further elaborate the output and obtain a best fit model, I will utilize Backward elimination.
+.
+```{r}
+Full = lm(HeartDisease~., data = Heart_sample1) 
+MSE=(summary(Full)$sigma)^2
+step(Full,scale=MSE)
+```
+Then, I will use Forward selection.
+```{r}
+none = lm(HeartDisease~1, data=Heart_sample1)
+step(none, scope=list(upper=Full), scale=MSE, direction='forward')
+```
+Lastly, I will use stepwise regression.
+```{r}
+step(none,scope=list(upper=Full),scale=MSE)
+```
+Based on the above output, the bestfit model only considering numeric variables may be lm(HeartDisease ~ Cholesterol + FastingBS + MaxHR + Oldpeak), and thus, the doctor should pay more attention on a patient's Cholesterol, FastingBS, MaxHR and Oldpeak in considering the potential of heart disease.
+
+Q2
+Is heart disease more common in women than in men?
+```{r}
+head(Heart_sample)
+```
+
+```{r}
+ggplot(Heart_sample,aes(HeartDisease)) + geom_bar(aes(Sex))
+```
+Based on the above bar chart, male seems to have significantly much more count in having heart disease than female. However, that is not enough in stating such claim, as there may be other reasons explaining this. Therefore, I will next construct a t-test to give a further explanation.
+
+```{r}
+Heart_female = subset(Heart_sample, Sex == "F")
+Heart_male = subset(Heart_sample, Sex == "M")
+
+t.test(Heart_female$HeartDisease, Heart_male$HeartDisease)
+```
+Based on the output above, while p-value < 0.00000000000000022, which is extremely small, there is strong statistical evidence that male is more likely to get heart disease compared to female.
+
+2nd Meeting
+```{r}
+ggplot(data = Heart_sample, aes(x = Age, y = Cholesterol
+, color = factor(Sex))) +
+  geom_point(alpha = 0.5) +
+  geom_smooth()+
+  labs(title = "Comparison of Age and Cholesterol by Sex")
+```
+```{r}
+Heart_sample2 <- table(Heart_sample$Sex, Heart_sample$ChestPainType == "ASY")
+
+chisq.test(Heart_sample2)
+```
+```{r}
+barplot(
+  rbind(Heart_sample2[1, ], Heart_sample2[2, ]),
+  beside = TRUE,
+  names.arg = c("Female", "Male"),
+  col = c("steelblue", "lightblue")
+)
+
+legend("top", legend = c("Other Types", "ASY"), fill = c("steelblue", "lightblue"))
+```
+
+The result of a chi-squared test is large, such that the p-value is small, it means that the observed values in the contingency table are not close to the expected values. This suggests that there may be a significant association between the variables being tested (in this case, sex and chest pain type).
+
+**Final**：
+
+To investigate the potential relationship between an individual's sex and the type of chest pain they experience, we use a contingency table and a chi-squared test of independence. Baed on the result of the chi-squared test, it suggests that there is a significant association between the variables 'Sex' and 'ChestPainType' at a statistically significant level. The chi-squared statistic value of 30.139 indicates that the difference between the observed frequencies and expected frequencies is relatively large, which suggests that the association between the variables is not likely due to chance. The degrees of freedom (df) for this test is 1, which indicates that the contingency table has one degree of freedom since there are only two variables in the table. The p-value of 0.00000004022 suggests that the likelihood of observing such a large difference between the observed and expected frequencies, assuming there is no association between the variables, is very low. Therefore, we can reject the null hypothesis that there is no association between the variables 'Sex' and 'ChestPainType'. Instead, we can conclude that there is a significant association between these variables in the sample. Consequently, it may be useful to consider this information when diagnosing and treating patients with chest pain. Specifically, the healthcare provider may consider asking questions about the type of chest pain experienced by patients, as well as their sex, to help inform their diagnosis and treatment plan. They may also consider incorporating sex-specific risk factors for cardiovascular disease, as well as any potential differences in symptoms and presentation of chest pain, into their assessment.
+
+```{r}
+heart_subset <- subset(Heart_sample, select = c(Age, Sex, ChestPainType))
+
+heart_subset$asymptomatic <- ifelse(heart_subset$ChestPainType == "ASY", 1, 0)
+
+ggplot(heart_subset, aes(x = Age, fill = factor(asymptomatic))) +
+  geom_density(alpha = 0.5) +
+  facet_grid(. ~ Sex) +
+  scale_fill_manual(values = c("#E69F00", "#56B4E9")) +
+  labs(x = "Age", y = "Density", fill = "Asymptomatic") +
+  theme_classic()
+```
+Based on the graph, we can see that for females, the peak of the density distribution for asymptomatic individuals is around age 50, while the peak for symptomatic individuals is around age 60. This suggests that asymptomatic females with heart conditions tend to be younger on average than symptomatic females with heart conditions. However, for men, the distributions are alike. Thus, the age distribution of men with heart conditions is not as strongly associated with their symptom status as it is for women.
+
+```{r}
+# Logistic regression model
+
+trainIndex <- createDataPartition(heart_subset$ChestPainType, p = .8, list = FALSE)
+train <- heart_subset[ trainIndex,]
+test <- heart_subset[-trainIndex,]
+
+log_reg_model <- glm(asymptomatic ~ Age + Sex, data = train, family = "binomial")
+summary(log_reg_model)
+
+plot(log_reg_model)
+
+```
+```{r}
+# Load the ggplot2 and dplyr packages
+library(ggplot2)
+library(dplyr)
+
+# Create a data frame of new values to predict
+newdata <- data.frame(Age = seq(20, 80, length.out = 100),
+                      Sex = c(rep("M", 50), rep("F", 50)))
+
+# Make predictions for the new values
+newdata$yhat <- predict(log_reg_model, newdata, type = "response")
+
+# Reshape the data for plotting
+plotdata <- newdata %>%
+  mutate(Sex = factor(Sex, levels = c("M", "F"))) %>%
+  tidyr::pivot_wider(names_from = Sex, values_from = yhat)
+
+# Plot the predicted probabilities
+ggplot(plotdata, aes(x = Age, y = M)) +
+  geom_line(color = "blue") +
+  geom_line(aes(y = F), color = "pink") +
+  xlab("Age") +
+  ylab("Predicted probability of asymptomatic chest pain") +
+  ggtitle("Predicted probabilities of asymptomatic chest pain by age and sex") +
+  scale_color_manual(values = c("blue", "pink"), 
+                     labels = c("Male", "Female"), 
+                     name = "Sex") +
+  theme_bw()
+
+
+```
+
+
+
+**Final**：
+
+To investigate if age and gender play a role in being asymptomatic, we created a density plot created that provides insights into the age distribution of individuals with and without asymptomatic chest pain, stratified by sex. The plot suggests that there may be a difference in the age distribution of women with heart conditions based on the presence or absence of asymptomatic chest pain. Specifically, the peak of the density distribution for females with asymptomatic chest pain is around age 50, while the peak for females with symptomatic chest pain is around age 60. This implies that asymptomatic females with heart conditions may be younger on average than symptomatic females with heart conditions. In contrast, the age distribution of men with heart conditions is not as strongly associated with the presence or absence of asymptomatic chest pain as it is for women. The distributions of age for men with and without asymptomatic chest pain overlap significantly, indicating that the age of onset of heart conditions in men may not be as closely linked to the presence or absence of asymptomatic chest pain as it is for women.
+
+It is important to note that these findings are based on a sample of individuals and may not generalize to the larger population. Further research is necessary to confirm and expand upon these findings. Additionally, the analysis only identifies an association between age, sex, and chest pain type and does not establish causality or directionality of the association. Therefore, healthcare providers should use this information as one piece of a larger diagnostic and treatment plan, while also taking into account other factors and individual patient circumstances.
+
+
+
+
+
